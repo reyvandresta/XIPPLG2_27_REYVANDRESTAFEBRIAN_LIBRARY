@@ -3,78 +3,82 @@
 namespace App\Http\Controllers;
 
 use App\Models\Loan;
-use App\Models\Book;
 use Illuminate\Http\Request;
-use Illuminate\Support\Facades\Auth;
-use Exception;
 
 class LoanController extends Controller
 {
-    public function index()
-    {
-        try {
-            $loans = Loan::all();
-            return response()->json($loans, 200);
-        } catch (Exception $e) {
-            return response()->json(['error' => $e->getMessage()], 500);
-        }
-    }
-
+    // Menyimpan pinjaman baru
     public function store(Request $request)
     {
+        $request->validate([
+            'book_id' => 'required|exists:books,id',
+            'user_id' => 'required|exists:users,id',
+            'loan_date' => 'required|date',
+            'return_date' => 'required|date|after_or_equal:loan_date',
+            'status' => 'required|string|max:255',
+        ]);
+
         try {
-            $validated = $request->validate([
-                'book_id' => 'required|exists:books,id',
-                'loan_date' => 'required|date',
-                'return_date' => 'nullable|date|after:loan_date',
-            ]);
+            $loan = Loan::create($request->all());
 
-            $loan = Loan::create([
-                'book_id' => $validated['book_id'],
-                'user_id' => Auth::user()->id,
-                'loan_date' => $validated['loan_date'],
-                'return_date' => $validated['return_date'] ?? null,
-            ]);
-
-            return response()->json($loan, 201);
-        } catch (Exception $e) {
-            return response()->json(['error' => $e->getMessage()], 500);
+            return response()->json([
+                'message' => 'Pinjaman berhasil dibuat.',
+                'loan' => $loan,
+            ], 201);
+        } catch (\Exception $e) {
+            return response()->json(['message' => 'Pembuatan pinjaman gagal', 'error' => $e->getMessage()], 500);
         }
     }
 
+    // Menampilkan semua pinjaman
+    public function index()
+    {
+        $loans = Loan::with(['book', 'user'])->get();
+        return response()->json($loans, 200);
+    }
+
+    // Menampilkan pinjaman berdasarkan ID
     public function show($id)
     {
-        try {
-            $loan = Loan::findOrFail($id);
-            return response()->json($loan, 200);
-        } catch (Exception $e) {
-            return response()->json(['error' => $e->getMessage()], 500);
-        }
+        $loan = Loan::with(['book', 'user'])->findOrFail($id);
+        return response()->json($loan, 200);
     }
 
+    // Memperbarui pinjaman
     public function update(Request $request, $id)
     {
+        $request->validate([
+            'book_id' => 'sometimes|exists:books,id',
+            'user_id' => 'sometimes|exists:users,id',
+            'loan_date' => 'sometimes|date',
+            'return_date' => 'sometimes|date|after_or_equal:loan_date',
+            'status' => 'sometimes|string|max:255',
+        ]);
+
         try {
             $loan = Loan::findOrFail($id);
-            $validated = $request->validate([
-                'loan_date' => 'required|date',
-                'return_date' => 'nullable|date|after:loan_date',
-            ]);
-            $loan->update($validated);
-            return response()->json($loan, 200);
-        } catch (Exception $e) {
-            return response()->json(['error' => $e->getMessage()], 500);
+            $loan->update($request->all());
+
+            return response()->json([
+                'message' => 'Pinjaman berhasil diperbarui.',
+                'loan' => $loan,
+            ], 200);
+        } catch (\Exception $e) {
+            return response()->json(['message' => 'Pembaruan pinjaman gagal', 'error' => $e->getMessage()], 500);
         }
     }
 
+    // Menghapus pinjaman
     public function destroy($id)
     {
-        try {
-            $loan = Loan::findOrFail($id);
-            $loan->delete();
-            return response()->json(['message' => 'Loan deleted successfully'], 200);
-        } catch (Exception $e) {
-            return response()->json(['error' => $e->getMessage()], 500);
+        $loan = Loan::find($id);
+        
+        if (!$loan) {
+            return response()->json(['message' => 'Pinjaman tidak ditemukan'], 404);
         }
+        
+        $loan->delete();
+    
+        return response()->json(['message' => 'Pinjaman berhasil dihapus'], 200);
     }
 }
